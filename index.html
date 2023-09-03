@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+    <meta content="utf-8" http-equiv="enconding">
+
+    <!--prevent cache -->
+    <meta http-equiv='expires' content='0'>
+    <meta http-equiv='pragma' content='no-cache'>
+    <meta http-equiv='cache-control' content='no-cache'>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<p id="debugText">(recent text display or temporary debug output)</p>
+
+<script>
+
+    // variables to keep track of car position
+    let carX = 75, carY = 75;
+    let carSpeedX = 6, carSpeedY = 8;
+    let carAng = 0;
+
+    const carPic = document.createElement('img');
+    let carPicLoaded = false;
+
+    // track constants and variables
+    const TRACK_W = 40;
+    const TRACK_H = 40;
+    const TRACK_GAP = 1;
+    const TRACK_COLS = 20;
+    const TRACK_ROWS = 15;
+
+    // save the canvas for dimensions, and its context for drawing to it
+    let canvas, canvasContext;
+
+    const trackGrid = [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
+        1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1,
+        1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1,
+        1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1,
+        1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+
+    function keyPressed(evt) {
+        document.getElementById('debugText').innerHTML = "KeyCode Pushed: " + evt.keyCode;
+    }
+
+    function keyReleased(evt) {
+        document.getElementById('debugText').innerHTML = "KeyCode Released: " + evt.keyCode;
+    }
+
+    window.onload = function () {
+        canvas = document.getElementById('gameCanvas');
+        canvasContext = canvas.getContext('2d');
+
+        // load car image
+        carPic.onload = function () {
+            carPicLoaded = true; // dont try to display until its loaded
+        }
+        carPic.src = "player1.png";
+
+        const framesPerSecond = 30;
+        setInterval(function () {
+            moveEverything();
+            drawEverything();
+        }, 1000/framesPerSecond);
+
+        carReset();
+
+        document.addEventListener("keydown", keyPressed);
+        document.addEventListener("keyup", keyReleased);
+    }
+
+    function trackTileToIndex(tileCol, tileRow) {
+        return (tileCol + TRACK_COLS * tileRow);
+    }
+
+    function bounceOffTrackAtPixelCoord(pixelX, pixelY) {
+        // get the tile column and row that car is currently over
+        const tileCol = Math.floor(pixelX / TRACK_W);
+        const tileRow = Math.floor(pixelY / TRACK_H);
+
+        // check whether te car is within any part of the track wall
+        if (tileCol < 0 || tileCol >= TRACK_COLS ||
+            tileRow < 0 || tileRow >= TRACK_ROWS) {
+            return ; // bail out of function to avoid illegal array position usage
+        }
+
+        const trackIndex = trackTileToIndex(tileCol, tileRow);
+
+        if (trackGrid[trackIndex] == 1) { // if there is a track
+            const prevCarX = carX - carSpeedX;
+            const prevCarY = carY - carSpeedY;
+
+            const prevTileCol = Math.floor(prevCarX / TRACK_W);
+            const prevTileRow = Math.floor(prevCarY / TRACK_H);
+
+            let bothTestsFailed = true;
+
+            if (tileCol != prevTileCol) { // if car has entered from the track's side
+                const adjacentTrackIndex = trackTileToIndex(prevTileCol, tileRow);
+
+                // make sure the side we want to reflect off isn't blocked
+                if (trackGrid[adjacentTrackIndex] != 1) {
+                    carSpeedX *= -1; // reverse car's horizontal speed
+                    bothTestsFailed = false;
+                }
+            }
+
+            if (tileRow != prevTileRow) { // if car has entered from the track's top or bottom
+                const adjacentTrackIndex = trackTileToIndex(tileCol, prevTileRow);
+
+                // make sure the side we want to reflect off isn't blocked
+                if (trackGrid[adjacentTrackIndex] != 1) {
+                    carSpeedY *= -1; // reverse car's vertical speed
+                    bothTestsFailed = false;
+                }
+            }
+
+            // we hit an "armpit" on the inside corner, flip both to avoid going into it
+            if (bothTestsFailed) { 
+                carSpeedX *= -1;
+                carSpeedY *= -1;
+            }
+        }
+    }
+
+    function isTrackAtTileCoord(trackTileCol, trackTileRow) {
+        const trackIndex = trackTileToIndex(trackTileCol, trackTileRow);
+
+        return (trackGrid[trackIndex] == 1);
+    }
+
+    function drawTracks() {
+        for (let col = 0; col < TRACK_COLS; col++) {
+            for (let row = 0; row < TRACK_ROWS; row++) {
+                if (isTrackAtTileCoord(col, row)) { // check the track grid state
+                    const trackTopLeftX = TRACK_W * col;
+                    const trackTopLeftY = TRACK_H * row;
+
+                    colorRect(trackTopLeftX, trackTopLeftY,
+                        TRACK_W - TRACK_GAP, TRACK_H - TRACK_GAP, 'blue');
+                }
+            }
+        }
+    }
+
+    function carReset() {
+        // center the car on screen
+        //carX = canvas.width/2;
+        carX = canvas.width/2 + 50;
+        carY = canvas.height/2;
+    }
+
+    function moveEverything() {
+        if (carX > canvas.width) { // if car has moved beyond the RIGHT edge
+            carSpeedX *= -1; // reverse car's horizontal direction
+        }
+
+        if (carX < 0) { // if car has moved beyond the LEFT edge
+            carSpeedX *= -1; // reverse car's horizontal direction
+        }
+
+        if (carY < 0) { // if car has moved beyond the TOP edge
+            carSpeedY *= -1; // reverse car's vertical direction
+        }
+
+        if (carY > canvas.height) { // if car has moved beyond the BOTTOM edge
+            carReset();
+        }
+
+        bounceOffTrackAtPixelCoord(carX, carY);
+
+        carX += carSpeedX; // move the car based on it's current horizontal speed
+        carY += carSpeedY; // move the car based on it's current vertical speed
+    }
+
+    function colorRect(topLeftX, topLeftY, boxWidth, boxHeight, fillColor) {
+        canvasContext.fillStyle = fillColor;
+        canvasContext.fillRect(topLeftX, topLeftY, boxWidth, boxHeight);
+    }
+
+    function drawBitmapCenteredAtLocationWithRotation(graphic, atX, atY, withAngle) {
+        canvasContext.save(); // allows us to undo translate movement and rotate spin
+        canvasContext.translate(carX, carY); // sets the point where our graphic will go
+        canvasContext.rotate(carAng); // sets the rotation
+        canvasContext.drawImage(carPic, -carPic.width/2, -carPic.height/2);
+        canvasContext.restore();
+    }
+
+    function carDraw() {
+        if (carPicLoaded) {
+            drawBitmapCenteredAtLocationWithRotation(carPic, carX, carY, carAng);
+        }
+        carAng += 0.2;
+    }
+
+    function drawEverything() {
+        // clear the game view by filling it with black
+        colorRect(0, 0, canvas.width, canvas.height, 'black');
+
+        carDraw();
+
+        drawTracks();
+    }
+</script>
+
+</body>
+</html>
