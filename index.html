@@ -1,3 +1,15 @@
+<!-- *********************************************************************** -->
+<!--                                                                         -->
+<!--                                                      :::      ::::::::  -->
+<!-- index.html                                         :+:      :+:    :+:  -->
+<!--                                                  +:+ +:+         +:+    -->
+<!-- By: almelo <almelo@student.42.fr>              +#+  +:+       +#+       -->
+<!--                                              +#+#+#+#+#+   +#+          -->
+<!-- Created: 2023/09/12 16:48:17 by almelo            #+#    #+#            -->
+<!-- Updated: 2023/09/12 20:01:08 by almelo           ###   ########.fr      -->
+<!--                                                                         -->
+<!-- *********************************************************************** -->
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -11,245 +23,16 @@
     <meta http-equiv='cache-control' content='no-cache'>
 </head>
 <body>
-<canvas id="gameCanvas" width="800" height="600"></canvas>
+	<canvas id="gameCanvas" width="800" height="600"></canvas>
 
-<p id="debugText">(recent text display or temporary debug output)</p>
+	<p id="debugText">(recent text display or temporary debug output)</p>
 
-<script>
-
-    // variables to keep track of car position
-    let carX = 75, carY = 75;
-    let carSpeed = 0;
-    let carAng = 0;
-
-    // track constants and variables
-    const TRACK_W = 40;
-    const TRACK_H = 40;
-    const TRACK_GAP = 1;
-    const TRACK_COLS = 20;
-    const TRACK_ROWS = 15;
-
-    // key codes
-    const KEY_UP_ARROW = 38;
-    const KEY_RIGHT_ARROW = 39;
-    const KEY_DOWN_ARROW = 40;
-    const KEY_LEFT_ARROW = 37;
-
-    // keyboard hold state variables, to use keys more like buttons
-    let keyHeld_Gas = false;
-    let keyHeld_Reverse = false;
-    let keyHeld_TurnLeft = false;
-    let keyHeld_TurnRight = false;
-
-    const trackGrid = [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1,
-        1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1,
-        1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1,
-        1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-
-    // save the canvas for dimensions, and its context for drawing to it
-    let canvas, canvasContext;
-
-    const carPic = document.createElement('img');
-    let carPicLoaded = false;
-
-    function keyPressed(evt) {
-        document.getElementById('debugText').innerHTML = "KeyCode Pushed: " + evt.keyCode;
-
-        if (evt.keyCode == KEY_UP_ARROW) {
-            keyHeld_Gas = true;
-        }
-        if (evt.keyCode == KEY_DOWN_ARROW) {
-            keyHeld_Reverse = true;
-        }
-
-        if (evt.keyCode == KEY_LEFT_ARROW) {
-            keyHeld_TurnLeft = true;
-        }
-        if (evt.keyCode == KEY_RIGHT_ARROW) {
-            keyHeld_TurnRight = true;
-        }
-        evt.preventDefault(); // block keys from serving their default functionality in the web browser
-    }
-
-    function keyReleased(evt) {
-        document.getElementById('debugText').innerHTML = "KeyCode Released: " + evt.keyCode;
-
-        if (evt.keyCode == KEY_UP_ARROW) {
-            keyHeld_Gas = false;
-        }
-        if (evt.keyCode == KEY_DOWN_ARROW) {
-            keyHeld_Reverse = false;
-        }
-
-        if (evt.keyCode == KEY_LEFT_ARROW) {
-            keyHeld_TurnLeft = false;
-        }
-        if (evt.keyCode == KEY_RIGHT_ARROW) {
-            keyHeld_TurnRight = false;
-        }
-    }
-
-    window.onload = function () {
-        canvas = document.getElementById('gameCanvas');
-        canvasContext = canvas.getContext('2d');
-
-        // load car image
-        carPic.onload = function () {
-            carPicLoaded = true; // dont try to display until its loaded
-        }
-        carPic.src = "player1.png";
-
-        const framesPerSecond = 30;
-        setInterval(function () {
-            moveEverything();
-            drawEverything();
-        }, 1000/framesPerSecond);
-
-        carReset();
-
-        document.addEventListener("keydown", keyPressed);
-        document.addEventListener("keyup", keyReleased);
-    }
-
-    function trackTileToIndex(tileCol, tileRow) {
-        return (tileCol + TRACK_COLS * tileRow);
-    }
-
-    function isTrackAtTileCoord(trackTileCol, trackTileRow) {
-        const trackIndex = trackTileToIndex(trackTileCol, trackTileRow);
-
-        return (trackGrid[trackIndex] == 1);
-    }
-
-    function bounceOffTrackAtPixelCoord(pixelX, pixelY) {
-        // get the tile column and row that car is currently over
-        const tileCol = Math.floor(pixelX / TRACK_W);
-        const tileRow = Math.floor(pixelY / TRACK_H);
-
-        // check whether te car is within any part of the track wall
-        if (tileCol < 0 || tileCol >= TRACK_COLS ||
-            tileRow < 0 || tileRow >= TRACK_ROWS) {
-            return ; // bail out of function to avoid illegal array position usage
-        }
-
-        const trackIndex = trackTileToIndex(tileCol, tileRow);
-
-        if (trackGrid[trackIndex] == 1) { // if there is a track
-            const prevCarX = carX - carSpeedX;
-            const prevCarY = carY - carSpeedY;
-
-            const prevTileCol = Math.floor(prevCarX / TRACK_W);
-            const prevTileRow = Math.floor(prevCarY / TRACK_H);
-
-            let bothTestsFailed = true;
-
-            if (tileCol != prevTileCol) { // if car has entered from the track's side
-                const adjacentTrackIndex = trackTileToIndex(prevTileCol, tileRow);
-
-                // make sure the side we want to reflect off isn't blocked
-                if (trackGrid[adjacentTrackIndex] != 1) {
-                    carSpeedX *= -1; // reverse car's horizontal speed
-                    bothTestsFailed = false;
-                }
-            }
-
-            if (tileRow != prevTileRow) { // if car has entered from the track's top or bottom
-                const adjacentTrackIndex = trackTileToIndex(tileCol, prevTileRow);
-
-                // make sure the side we want to reflect off isn't blocked
-                if (trackGrid[adjacentTrackIndex] != 1) {
-                    carSpeedY *= -1; // reverse car's vertical speed
-                    bothTestsFailed = false;
-                }
-            }
-
-            // we hit an "armpit" on the inside corner, flip both to avoid going into it
-            if (bothTestsFailed) { 
-                carSpeedX *= -1;
-                carSpeedY *= -1;
-            }
-        }
-    }
-
-    function drawTracks() {
-        for (let col = 0; col < TRACK_COLS; col++) {
-            for (let row = 0; row < TRACK_ROWS; row++) {
-                if (isTrackAtTileCoord(col, row)) { // check the track grid state
-                    const trackTopLeftX = TRACK_W * col;
-                    const trackTopLeftY = TRACK_H * row;
-
-                    colorRect(trackTopLeftX, trackTopLeftY,
-                        TRACK_W - TRACK_GAP, TRACK_H - TRACK_GAP, 'blue');
-                }
-            }
-        }
-    }
-
-    function carReset() {
-        // center the car on screen
-        carX = canvas.width/2 + 50;
-        carY = canvas.height/2;
-        //carX = canvas.width/2;
-    }
-
-    function moveEverything() {
-        if (keyHeld_Gas) {
-            carSpeed += 0.5;
-        }
-        if (keyHeld_Reverse) {
-            carSpeed += -0.5;
-        }
-
-        if (keyHeld_TurnLeft) {
-            carAng += -0.03*Math.PI;
-        }
-        if (keyHeld_TurnRight) {
-            carAng += 0.03*Math.PI;
-        }
-        carX += Math.cos(carAng) * carSpeed;
-        carY += Math.sin(carAng) * carSpeed;
-    }
-
-    function colorRect(topLeftX, topLeftY, boxWidth, boxHeight, fillColor) {
-        canvasContext.fillStyle = fillColor;
-        canvasContext.fillRect(topLeftX, topLeftY, boxWidth, boxHeight);
-    }
-
-    function drawBitmapCenteredAtLocationWithRotation(graphic, atX, atY, withAngle) {
-        canvasContext.save(); // allows us to undo translate movement and rotate spin
-        canvasContext.translate(carX, carY); // sets the point where our graphic will go
-        canvasContext.rotate(carAng); // sets the rotation
-        canvasContext.drawImage(carPic, -carPic.width/2, -carPic.height/2);
-        canvasContext.restore();
-    }
-
-    function carDraw() {
-        if (carPicLoaded) {
-            drawBitmapCenteredAtLocationWithRotation(carPic, carX, carY, carAng);
-        }
-    }
-
-    function drawEverything() {
-        // clear the game view by filling it with black
-        colorRect(0, 0, canvas.width, canvas.height, 'black');
-
-        drawTracks();
-
-        carDraw();
-    }
-</script>
-
+	<script src="GraphicsCommon.js"></script>
+	<script src="ImageLoading.js"></script>
+	<script src="Input.js"></script>
+	<script src="Track.js"></script>
+	<script src="Car.js"></script>
+	<script src="Main.js"></script>
 </body>
+
 </html>
